@@ -19,6 +19,10 @@ func attachRoutes(r *chi.Mux, nc *nats.Conn) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = t.ExecuteTemplate(w, "index.html", nil)
 	})
+
+	r.Get("/auth", func(w http.ResponseWriter, r *http.Request) {
+		_ = t.ExecuteTemplate(w, "index.html", nil) // reuse for now
+	})
 }
 
 func Start(ctx context.Context, opt Options) error {

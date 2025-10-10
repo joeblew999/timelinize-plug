@@ -3,6 +3,22 @@
 <head><meta charset="utf-8"/><title>tplug</title></head>
 <body>
   <h1>tplug</h1>
-  <p>Server is up. SSE topics: <code>/events/import</code>, <code>/events/auth</code>, <code>/events/status</code></p>
+  <p>Server is up.</p>
+  <ul>
+    <li>SSE: <code>/events/import</code></li>
+    <li>SSE: <code>/events/auth</code></li>
+    <li>SSE: <code>/events/status</code></li>
+  </ul>
+
+  <h2>Live auth stream</h2>
+  <pre id="log" style="background:#111;color:#0f0;padding:8px;height:200px;overflow:auto;"></pre>
+
+  <script>
+    const log = document.getElementById('log');
+    function append(x){ log.textContent += x + '\n'; log.scrollTop = log.scrollHeight; }
+    const es = new EventSource('/events/auth?tenant=local');
+    es.onmessage = (e) => append(e.data);
+    es.onerror = (e) => append('[[error]]');
+  </script>
 </body>
 </html>
