@@ -15,7 +15,7 @@ type Options struct {
 }
 
 // StartEmbedded boots an embedded PocketBase (NO CGO via modernc SQLite).
-// It runs sync (does not start HTTP). You can register hooks here later.
+// It runs sync (does not start HTTP). It also ensures core collections exist.
 func StartEmbedded(opt Options) (*pocketbase.PocketBase, error) {
 	if opt.DataDir == "" {
 		opt.DataDir = filepath.Join(os.Getenv("HOME"), ".tplug", "pb")
@@ -27,13 +27,14 @@ func StartEmbedded(opt Options) (*pocketbase.PocketBase, error) {
 		DefaultDataDir: opt.DataDir,
 	})
 
-	// Hook point for migrations/collections (tokens, secrets).
 	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+		if err := EnsureCollections(app); err != nil {
+			return err
+		}
 		log.Printf("PocketBase data dir: %s", opt.DataDir)
 		return nil
 	})
 
-	// Launch the app without HTTP server (headless).
 	go func() {
 		if err := app.Start(); err != nil {
 			log.Printf("pocketbase start: %v", err)
