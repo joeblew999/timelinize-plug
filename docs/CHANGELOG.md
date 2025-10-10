@@ -1,2 +1,2 @@
-# Change Log
-- [2025-10-10] Add OAuth helpers (NATS events + redirect), embed PB headless, SSE UI for /events/auth; PB TokenStore fallback.
+# Changelog
+- [2025-10-10] Encrypt tokens at rest (AES-GCM key in PB secrets); import progress NATS emits + SSE UI; Apple auth scaffolding.

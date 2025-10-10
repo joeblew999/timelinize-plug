@@ -11,14 +11,21 @@
   </ul>
 
   <h2>Live auth stream</h2>
-  <pre id="log" style="background:#111;color:#0f0;padding:8px;height:200px;overflow:auto;"></pre>
+  <pre id="authlog" style="background:#111;color:#0f0;padding:8px;height:180px;overflow:auto;"></pre>
+
+  <h2>Live import stream</h2>
+  <pre id="importlog" style="background:#111;color:#0bf;padding:8px;height:180px;overflow:auto;"></pre>
 
   <script>
-    const log = document.getElementById('log');
-    function append(x){ log.textContent += x + '\n'; log.scrollTop = log.scrollHeight; }
-    const es = new EventSource('/events/auth?tenant=local');
-    es.onmessage = (e) => append(e.data);
-    es.onerror = (e) => append('[[error]]');
+    function wire(id, url){
+      const el = document.getElementById(id);
+      function append(x){ el.textContent += x + '\n'; el.scrollTop = el.scrollHeight; }
+      const es = new EventSource(url);
+      es.onmessage = (e) => append(e.data);
+      es.onerror = () => append('[[error]]');
+    }
+    wire('authlog','/events/auth?tenant=local');
+    wire('importlog','/events/import?tenant=local');
   </script>
 </body>
 </html>
