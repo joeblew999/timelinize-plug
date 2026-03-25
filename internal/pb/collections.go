@@ -1,8 +1,9 @@
 package pb
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
-	"log"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/daos"
@@ -13,13 +14,19 @@ import (
 // EnsureCollections makes sure core collections exist (tokens, secrets, kv).
 func EnsureCollections(app *pocketbase.PocketBase) error {
 	da := app.Dao()
-	if err := ensureTokens(da); err != nil { return fmt.Errorf("ensure tokens: %w", err) }
+	if err := ensureTokens(da); err != nil {
+		return fmt.Errorf("ensure tokens: %w", err)
+	}
 	return nil
 }
 
 func ensureTokens(da *daos.Dao) error {
 	const name = "tokens"
-	if da.FindCollectionByNameOrId(name) != nil {
+	existing, err := da.FindCollectionByNameOrId(name)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if existing != nil {
 		return nil
 	}
 	col := &models.Collection{
@@ -27,8 +34,8 @@ func ensureTokens(da *daos.Dao) error {
 		Type: models.CollectionTypeBase,
 	}
 	col.Schema = schema.NewSchema(
-		&schema.SchemaField{Name: "provider", Type: "text", Required: true, Options: &schema.TextOptions{Min: 2, Max: 64}},
-		&schema.SchemaField{Name: "payload", Type: "json", Required: true},
+		&schema.SchemaField{Name: "provider", Type: "text", Required: true},
+		&schema.SchemaField{Name: "payload", Type: "text", Required: true},
 	)
 	// unique index on provider
 	col.Indexes = []string{

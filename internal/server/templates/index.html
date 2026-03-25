@@ -1,31 +1,952 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"/><title>tplug</title></head>
-<body>
-  <h1>tplug</h1>
-  <p>Server is up.</p>
-  <ul>
-    <li>SSE: <code>/events/import</code></li>
-    <li>SSE: <code>/events/auth</code></li>
-    <li>SSE: <code>/events/status</code></li>
-  </ul>
-
-  <h2>Live auth stream</h2>
-  <pre id="authlog" style="background:#111;color:#0f0;padding:8px;height:180px;overflow:auto;"></pre>
-
-  <h2>Live import stream</h2>
-  <pre id="importlog" style="background:#111;color:#0bf;padding:8px;height:180px;overflow:auto;"></pre>
-
-  <script>
-    function wire(id, url){
-      const el = document.getElementById(id);
-      function append(x){ el.textContent += x + '\n'; el.scrollTop = el.scrollHeight; }
-      const es = new EventSource(url);
-      es.onmessage = (e) => append(e.data);
-      es.onerror = () => append('[[error]]');
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timelinize Plug</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
     }
-    wire('authlog','/events/auth?tenant=local');
-    wire('importlog','/events/import?tenant=local');
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      padding: 1.5rem;
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.9rem;
+      letter-spacing: 0.02em;
+    }
+    .tenant-form {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .tenant-form label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9rem;
+      gap: 0.25rem;
+    }
+    .tenant-form input {
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+    }
+    main {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem;
+      width: 100%;
+    }
+    section.panel {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 1rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
+    }
+    section.panel header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    section.panel header h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.2);
+      color: #cbd5f5;
+    }
+    .status::before {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.6;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .status-live {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+    }
+    .status-idle {
+      background: rgba(148, 163, 184, 0.15);
+      color: #cbd5f5;
+    }
+    .status-idle::before {
+      animation: none;
+      opacity: 0.4;
+    }
+    .status-error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+    ul.event-feed {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      max-height: 360px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+    }
+    ul.event-feed::-webkit-scrollbar {
+      width: 6px;
+    }
+    ul.event-feed::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ul.event-feed::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 3px;
+    }
+    ul.event-feed li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      background: rgba(30, 41, 59, 0.7);
+      border-radius: 0.6rem;
+      padding: 0.65rem 0.8rem;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      transition: background 0.2s ease;
+    }
+    ul.event-feed li:hover {
+      background: rgba(30, 41, 59, 0.85);
+    }
+    ul.event-feed li.event-error {
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    ul.event-feed li.event-done {
+      border-color: rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.08);
+    }
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .event-type {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.3rem;
+      background: rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+    }
+    .event-type.type-progress {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+    .event-type.type-done {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+    .event-type.type-error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+    .event-ts {
+      font-size: 0.7rem;
+      color: rgba(148, 163, 184, 0.75);
+      font-family: ui-monospace, monospace;
+    }
+    .event-message {
+      font-size: 0.9rem;
+      line-height: 1.4;
+      color: #e2e8f0;
+    }
+    .event-progress {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(148, 163, 184, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #06b6d4);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .event-metadata {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 0.7rem;
+      font-size: 0.75rem;
+      color: rgba(148, 163, 184, 0.8);
+      font-family: ui-monospace, monospace;
+    }
+    .event-metadata dt {
+      font-weight: 500;
+      color: #94a3b8;
+    }
+    .event-metadata dd {
+      margin: 0;
+      color: #cbd5e1;
+    }
+    .event-error-detail {
+      font-size: 0.8rem;
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 0.5rem;
+      border-radius: 0.4rem;
+      font-family: ui-monospace, monospace;
+      word-break: break-word;
+    }
+    .pb-admin-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .pb-admin-form label {
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      color: #cbd5f5;
+    }
+    .pb-admin-form input {
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+      font-size: 0.9rem;
+    }
+    .pb-admin-session {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 0.75rem;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      font-size: 0.9rem;
+    }
+    .pb-admin-session span {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .pb-admin-session strong {
+      font-size: 1rem;
+      color: #bbf7d0;
+    }
+    .pb-admin-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button.secondary {
+      padding: 0.45rem 0.9rem;
+      border-radius: 0.6rem;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+    button.secondary:hover {
+      border-color: rgba(255, 255, 255, 0.55);
+      color: #f8fafc;
+    }
+    .oauth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .oauth-form fieldset {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .oauth-form legend {
+      padding: 0 0.4rem;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+    }
+    .oauth-group {
+      display: grid;
+      gap: 0.6rem;
+    }
+    .oauth-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: #cbd5f5;
+    }
+    .oauth-toggle input[type="checkbox"] {
+      width: 1.1rem;
+      height: 1.1rem;
+      accent-color: #2563eb;
+    }
+    .oauth-group label {
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      color: #cbd5f5;
+    }
+    .oauth-group input {
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+      font-size: 0.9rem;
+    }
+    .oauth-hint {
+      font-size: 0.8rem;
+      color: rgba(148, 163, 184, 0.7);
+      line-height: 1.45;
+    }
+    .oauth-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    button.primary {
+      padding: 0.5rem 1rem;
+      border-radius: 0.6rem;
+      border: none;
+      background: linear-gradient(135deg, #2563eb, #0ea5e9);
+      color: #f8fafc;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button.primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(14, 165, 233, 0.25);
+    }
+    .flash-message {
+      font-size: 0.85rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      background: rgba(59, 130, 246, 0.2);
+      color: #bfdbfe;
+    }
+    .flash-message.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fecaca;
+    }
+    .placeholder {
+      margin: 0;
+      font-size: 0.85rem;
+      color: rgba(148, 163, 184, 0.7);
+      text-align: center;
+      padding: 2rem 1rem;
+    }
+    .quick-links {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.25rem;
+    }
+    .quick-links a {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.4rem;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      text-decoration: none;
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      transition: all 0.2s ease;
+    }
+    .quick-links a:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: rgba(59, 130, 246, 0.4);
+    }
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <script type="module">
+    import { load } from "https://cdn.jsdelivr.net/gh/starfederation/datastar@main/bundles/datastar.js";
+    const datastarApp = load();
+    window.datastarApp = datastarApp;
+  </script>
+</head>
+<body data-signals="{tenant: '{{ .Tenant }}', oauthMessage: ''}">
+  <header>
+    <h1>Timelinize Plug</h1>
+    <p>Embedded NATS • PocketBase • Datastar UI • Real-time Progress</p>
+    <form class="tenant-form" data-on-submit="evt.preventDefault()">
+      <label>
+        Tenant
+        <input name="tenant" data-bind="tenant" autocomplete="off" />
+      </label>
+    </form>
+    <div class="quick-links">
+      <a href="/events/import?tenant={{ .Tenant }}" target="_blank">Raw Import SSE</a>
+      <a href="/events/auth?tenant={{ .Tenant }}" target="_blank">Raw Auth SSE</a>
+      <a href="/events/status?tenant={{ .Tenant }}" target="_blank">Raw Status SSE</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" aria-live="polite">
+      <header>
+        <h2>PocketBase Admin</h2>
+      </header>
+      <p class="oauth-hint">
+        Sign in to the embedded PocketBase admin to manage OAuth providers. If this is your first run, create an admin account below.
+      </p>
+      <div id="pb-admin-flash" class="flash-message" hidden></div>
+      <div id="pb-admin-session" class="pb-admin-session" hidden>
+        <span>
+          <strong>PocketBase admin active</strong>
+          <small id="pb-admin-email"></small>
+        </span>
+        <div class="pb-admin-actions">
+          <button type="button" id="pb-admin-refresh" class="secondary">Refresh Providers</button>
+          <button type="button" id="pb-admin-logout" class="secondary">Sign Out</button>
+        </div>
+      </div>
+      <form id="pb-bootstrap-form" class="pb-admin-form" hidden>
+        <label>
+          Admin Email
+          <input type="email" name="email" autocomplete="off" required />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" autocomplete="new-password" required />
+        </label>
+        <label>
+          Confirm Password
+          <input type="password" name="passwordConfirm" autocomplete="new-password" required />
+        </label>
+        <div class="pb-admin-actions">
+          <button type="submit" class="primary">Create Admin</button>
+          <span class="oauth-hint">Passwords never leave this machine.</span>
+        </div>
+      </form>
+      <form id="pb-login-form" class="pb-admin-form" hidden>
+        <label>
+          Email
+          <input type="email" name="identity" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <div class="pb-admin-actions">
+          <button type="submit" class="primary">Sign In</button>
+          <span class="oauth-hint">Admin access powers PocketBase managed OAuth providers.</span>
+        </div>
+      </form>
+    </section>
+    <section class="panel" aria-live="polite">
+      <header>
+        <h2>OAuth Setup</h2>
+      </header>
+      <p class="oauth-hint">
+        Provide the OAuth credentials obtained from Google and GitHub. Redirects default to
+        <code>http://127.0.0.1:8008/oauth2-redirect</code> which matches the local CLI callback.
+      </p>
+      <div id="oauth-flash" class="flash-message" hidden></div>
+      <form id="oauth-form" class="oauth-form">
+        <fieldset>
+          <legend>Google</legend>
+          <div class="oauth-group">
+            <label class="oauth-toggle">
+              <input type="checkbox" name="google.enabled" />
+              Enable Google via PocketBase
+            </label>
+            <label>
+              Client ID
+              <input name="google.client_id" autocomplete="off" />
+            </label>
+            <label>
+              Client Secret
+              <input name="google.client_secret" autocomplete="off" />
+            </label>
+            <label>
+              Redirect URL
+              <input name="google.redirect_url" autocomplete="off" />
+            </label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>GitHub</legend>
+          <div class="oauth-group">
+            <label class="oauth-toggle">
+              <input type="checkbox" name="github.enabled" />
+              Enable GitHub via PocketBase
+            </label>
+            <label>
+              Client ID
+              <input name="github.client_id" autocomplete="off" />
+            </label>
+            <label>
+              Client Secret
+              <input name="github.client_secret" autocomplete="off" />
+            </label>
+            <label>
+              Redirect URL
+              <input name="github.redirect_url" autocomplete="off" />
+            </label>
+          </div>
+        </fieldset>
+        <div class="oauth-actions">
+          <button type="submit" class="primary">Save OAuth Credentials</button>
+          <span class="oauth-hint">Values are stored encrypted inside PocketBase.</span>
+        </div>
+      </form>
+    </section>
+    <section class="panel" aria-live="polite">
+      <header>
+        <h2>Import Progress</h2>
+        <span id="import-status-pill" class="status status-idle">idle</span>
+      </header>
+      <p id="import-empty" class="placeholder">
+        Waiting for import events...<br>
+        <small>Run: <code>tplug import --source google_photos --from /path</code></small>
+      </p>
+      <ul id="import-feed" class="event-feed"></ul>
+      <span hidden data-on-load__window="@get('/ui/datastar/import?tenant=' + $tenant)"></span>
+    </section>
+
+    <section class="panel" aria-live="polite">
+      <header>
+        <h2>Auth Events</h2>
+        <span id="auth-status-pill" class="status status-idle">idle</span>
+      </header>
+      <p id="auth-empty" class="placeholder">
+        Waiting for auth events...<br>
+        <small>Run: <code>tplug auth --provider google</code></small>
+      </p>
+      <ul id="auth-feed" class="event-feed"></ul>
+      <span hidden data-on-load__window="@get('/ui/datastar/auth?tenant=' + $tenant)"></span>
+    </section>
+
+    <section class="panel" aria-live="polite">
+      <header>
+        <h2>System Status</h2>
+        <span id="status-status-pill" class="status status-idle">idle</span>
+      </header>
+      <p id="status-empty" class="placeholder">
+        System status updates will appear here.
+      </p>
+      <ul id="status-feed" class="event-feed"></ul>
+      <span hidden data-on-load__window="@get('/ui/datastar/status?tenant=' + $tenant)"></span>
+    </section>
+  </main>
+  <script type="module">
+    const DEFAULT_REDIRECT = 'http://127.0.0.1:8008/oauth2-redirect';
+    let pbAdminState = { needsBootstrap: false, session: null, providers: null };
+    let legacyConfigLoaded = false;
+
+    function formatError(message) {
+      if (message == null) return 'Unexpected error';
+      const text = String(message).trim();
+      if (!text) return 'Unexpected error';
+      if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return parsed.join(' ');
+          }
+          if (typeof parsed === 'object' && parsed !== null) {
+            return Object.values(parsed).filter(Boolean).join(' ');
+          }
+          if (typeof parsed === 'string') {
+            return parsed;
+          }
+        } catch (_) {
+          // ignored
+        }
+      }
+      return text;
+    }
+
+    function showPBAdminMessage(message, isError = false) {
+      const flash = document.getElementById('pb-admin-flash');
+      if (!flash) return;
+      flash.textContent = message;
+      flash.hidden = !message;
+      flash.classList.toggle('error', !!isError);
+    }
+
+    function showOAuthMessage(message, isError = false) {
+      const flash = document.getElementById('oauth-flash');
+      if (!flash) return;
+      flash.textContent = message;
+      flash.hidden = !message;
+      flash.classList.toggle('error', !!isError);
+    }
+
+    function renderPBAdminState() {
+      const bootstrapForm = document.getElementById('pb-bootstrap-form');
+      const loginForm = document.getElementById('pb-login-form');
+      const sessionBox = document.getElementById('pb-admin-session');
+      const emailTarget = document.getElementById('pb-admin-email');
+
+      if (bootstrapForm) {
+        bootstrapForm.hidden = !pbAdminState.needsBootstrap;
+      }
+      if (loginForm) {
+        loginForm.hidden = pbAdminState.needsBootstrap || !!pbAdminState.session;
+        if (!loginForm.hidden) {
+          loginForm.reset();
+        }
+      }
+      if (sessionBox) {
+        sessionBox.hidden = !pbAdminState.session;
+      }
+      if (emailTarget) {
+        emailTarget.textContent = pbAdminState.session?.email || '';
+      }
+    }
+
+    function normalizeProvider(provider, fallback = DEFAULT_REDIRECT) {
+      const redirect = (provider?.redirectUrl ?? provider?.redirect_url ?? fallback ?? DEFAULT_REDIRECT).trim() || DEFAULT_REDIRECT;
+      const clientId = (provider?.clientId ?? provider?.client_id ?? '').trim();
+      const clientSecret = (provider?.clientSecret ?? provider?.client_secret ?? '').trim();
+      let enabled = provider?.enabled;
+      if (typeof enabled !== 'boolean') {
+        enabled = clientId !== '' && clientSecret !== '';
+      }
+      return {
+        enabled,
+        clientId,
+        clientSecret,
+        redirectUrl: redirect,
+      };
+    }
+
+    function applyOAuthProviders(source) {
+      const form = document.getElementById('oauth-form');
+      if (!form) return;
+      const redirectFallback = source?.redirectUrl || DEFAULT_REDIRECT;
+      const google = normalizeProvider(source?.google, redirectFallback);
+      const github = normalizeProvider(source?.github, redirectFallback);
+
+      const mapping = [
+        ['google.client_id', google.clientId],
+        ['google.client_secret', google.clientSecret],
+        ['google.redirect_url', google.redirectUrl || redirectFallback],
+        ['github.client_id', github.clientId],
+        ['github.client_secret', github.clientSecret],
+        ['github.redirect_url', github.redirectUrl || redirectFallback],
+      ];
+
+      for (const [name, value] of mapping) {
+        const input = form.elements.namedItem(name);
+        if (input && input.value !== value) {
+          input.value = value;
+        }
+      }
+
+      const googleToggle = form.elements.namedItem('google.enabled');
+      if (googleToggle) {
+        googleToggle.checked = !!google.enabled;
+      }
+      const githubToggle = form.elements.namedItem('github.enabled');
+      if (githubToggle) {
+        githubToggle.checked = !!github.enabled;
+      }
+    }
+
+    function serializeOAuthForm(form) {
+      const get = (name) => (form.elements.namedItem(name)?.value || '').trim();
+      const googleEnabled = !!form.elements.namedItem('google.enabled')?.checked;
+      const githubEnabled = !!form.elements.namedItem('github.enabled')?.checked;
+
+      return {
+        google: {
+          enabled: googleEnabled,
+          clientId: get('google.client_id'),
+          clientSecret: get('google.client_secret'),
+          redirectUrl: get('google.redirect_url') || DEFAULT_REDIRECT,
+        },
+        github: {
+          enabled: githubEnabled,
+          clientId: get('github.client_id'),
+          clientSecret: get('github.client_secret'),
+          redirectUrl: get('github.redirect_url') || DEFAULT_REDIRECT,
+        },
+      };
+    }
+
+    function toLegacyPayload(payload) {
+      return {
+        google: {
+          enabled: payload.google.enabled,
+          client_id: payload.google.clientId,
+          client_secret: payload.google.clientSecret,
+          redirect_url: payload.google.redirectUrl,
+        },
+        github: {
+          enabled: payload.github.enabled,
+          client_id: payload.github.clientId,
+          client_secret: payload.github.clientSecret,
+          redirect_url: payload.github.redirectUrl,
+        },
+      };
+    }
+
+    async function fetchLegacyOAuthConfig() {
+      if (legacyConfigLoaded) return;
+      try {
+        const res = await fetch('/api/oauth/clients', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to load OAuth settings');
+        const data = await res.json();
+        legacyConfigLoaded = true;
+        applyOAuthProviders({
+          redirectUrl: data?.google?.redirect_url || DEFAULT_REDIRECT,
+          google: data?.google || {},
+          github: data?.github || {},
+        });
+        const flash = document.getElementById('oauth-flash');
+        if (flash?.hidden) {
+          showOAuthMessage('Using fallback OAuth config. Sign in to PocketBase admin to sync provider settings.', false);
+        }
+      } catch (err) {
+        showOAuthMessage(formatError(err.message ?? err), true);
+      }
+    }
+
+    async function loadPBProviders() {
+      if (!pbAdminState.session) return;
+      const res = await fetch('/api/pb/admin/providers', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error((await res.text()) || 'Failed to load providers');
+      const data = await res.json();
+      if (data?.providers) {
+        pbAdminState.providers = data.providers;
+        applyOAuthProviders(data.providers);
+      }
+    }
+
+    async function refreshPBAdminState() {
+      try {
+        const res = await fetch('/api/pb/admin/state', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to load PocketBase admin state');
+        const data = await res.json();
+        pbAdminState = {
+          needsBootstrap: !!data.needsBootstrap,
+          session: data.session || null,
+          providers: data.providers || null,
+        };
+        renderPBAdminState();
+
+        if (pbAdminState.session) {
+          legacyConfigLoaded = false;
+          if (pbAdminState.providers) {
+            applyOAuthProviders(pbAdminState.providers);
+          } else {
+            await loadPBProviders();
+          }
+          const flash = document.getElementById('oauth-flash');
+          if (flash?.hidden) {
+            showOAuthMessage('PocketBase admin session active. Saving updates PocketBase providers.', false);
+          }
+        } else {
+          const adminFlash = document.getElementById('pb-admin-flash');
+          if (pbAdminState.needsBootstrap) {
+            if (adminFlash?.hidden) {
+              showPBAdminMessage('Create a PocketBase admin to unlock provider management.', false);
+            }
+          } else if (adminFlash?.hidden === true) {
+            showPBAdminMessage('', false);
+          }
+          await fetchLegacyOAuthConfig();
+        }
+      } catch (err) {
+        showPBAdminMessage(formatError(err.message ?? err), true);
+        await fetchLegacyOAuthConfig();
+      }
+    }
+
+    document.getElementById('pb-bootstrap-form')?.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const form = evt.currentTarget;
+      showPBAdminMessage('Creating admin...', false);
+      const payload = {
+        email: (form.elements.namedItem('email')?.value || '').trim(),
+        password: form.elements.namedItem('password')?.value || '',
+        passwordConfirm: form.elements.namedItem('passwordConfirm')?.value || '',
+      };
+      try {
+        const res = await fetch('/api/pb/admin/bootstrap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to create PocketBase admin');
+        form.reset();
+        legacyConfigLoaded = false;
+        await refreshPBAdminState();
+        showPBAdminMessage('Admin created and signed in.', false);
+        showOAuthMessage('PocketBase admin session active. Saving updates PocketBase providers.', false);
+      } catch (err) {
+        showPBAdminMessage(formatError(err.message ?? err), true);
+      }
+    });
+
+    document.getElementById('pb-login-form')?.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const form = evt.currentTarget;
+      showPBAdminMessage('Signing in...', false);
+      const payload = {
+        identity: (form.elements.namedItem('identity')?.value || '').trim(),
+        password: form.elements.namedItem('password')?.value || '',
+      };
+      try {
+        const res = await fetch('/api/pb/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to sign in');
+        form.reset();
+        legacyConfigLoaded = false;
+        await refreshPBAdminState();
+        showPBAdminMessage('Signed in to PocketBase admin.', false);
+        showOAuthMessage('PocketBase admin session active. Saving updates PocketBase providers.', false);
+      } catch (err) {
+        showPBAdminMessage(formatError(err.message ?? err), true);
+      }
+    });
+
+    document.getElementById('pb-admin-logout')?.addEventListener('click', async () => {
+      showPBAdminMessage('Signing out...', false);
+      try {
+        const res = await fetch('/api/pb/admin/logout', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' },
+        });
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to sign out');
+        pbAdminState.session = null;
+        pbAdminState.providers = null;
+        legacyConfigLoaded = false;
+        await refreshPBAdminState();
+        showPBAdminMessage('Signed out of PocketBase admin.', false);
+        const flash = document.getElementById('oauth-flash');
+        if (flash?.hidden) {
+          showOAuthMessage('Without a PocketBase admin session, changes are stored in the local fallback config.', false);
+        }
+      } catch (err) {
+        showPBAdminMessage(formatError(err.message ?? err), true);
+      }
+    });
+
+    document.getElementById('pb-admin-refresh')?.addEventListener('click', async () => {
+      if (!pbAdminState.session) return;
+      showPBAdminMessage('Refreshing provider settings...', false);
+      try {
+        await loadPBProviders();
+        showPBAdminMessage('Provider settings refreshed.', false);
+      } catch (err) {
+        showPBAdminMessage(formatError(err.message ?? err), true);
+      }
+    });
+
+    document.getElementById('oauth-form')?.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const form = evt.currentTarget;
+      showOAuthMessage('Saving...', false);
+      const payload = serializeOAuthForm(form);
+      try {
+        let res;
+        if (pbAdminState.session) {
+          res = await fetch('/api/pb/admin/providers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          res = await fetch('/api/oauth/clients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(toLegacyPayload(payload)),
+          });
+        }
+        if (!res.ok) throw new Error((await res.text()) || 'Failed to save OAuth settings');
+        const data = await res.json();
+        if (pbAdminState.session && data?.providers) {
+          pbAdminState.providers = data.providers;
+          applyOAuthProviders(data.providers);
+          showOAuthMessage('PocketBase provider settings saved.', false);
+        } else {
+          legacyConfigLoaded = false;
+          applyOAuthProviders({
+            redirectUrl: data?.google?.redirect_url || DEFAULT_REDIRECT,
+            google: data?.google || {},
+            github: data?.github || {},
+          });
+          showOAuthMessage('OAuth credentials saved. You can now run `tplug auth --provider ...`', false);
+        }
+      } catch (err) {
+        showOAuthMessage(formatError(err.message ?? err), true);
+      }
+    });
+
+    refreshPBAdminState();
   </script>
 </body>
 </html>

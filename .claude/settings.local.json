@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(go build:*)",
+      "Bash(chmod:*)",
+      "Bash(./test_import_progress.sh:*)",
+      "Bash(find:*)",
+      "Read(//Users/apple/workspace/go/src/github.com/**)",
+      "Bash(killall:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(tree:*)",
+      "Bash(go test:*)",
+      "Bash(./tplug:*)",
+      "Bash(if [ -z \"$GOOGLE_CLIENT_ID\" ])",
+      "Bash(then echo \"❌ GOOGLE_CLIENT_ID not set\")",
+      "Bash(else echo \"✓ GOOGLE_CLIENT_ID: $GOOGLE_CLIENT_ID:0:30...\")",
+      "Bash(fi)",
+      "Bash(if [ -z \"$GOOGLE_CLIENT_SECRET\" ])",
+      "Bash(then echo \"❌ GOOGLE_CLIENT_SECRET not set\")",
+      "Bash(else echo \"✓ GOOGLE_CLIENT_SECRET: $GOOGLE_CLIENT_SECRET:0:20...\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

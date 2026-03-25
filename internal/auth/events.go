@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -10,8 +9,12 @@ import (
 
 // Emit auth lifecycle events to NATS so UI can stream via SSE.
 func publishAuthEvent(nc *nats.Conn, tenant, kind string, payload []byte) error {
-	if tenant == "" { tenant = "local" }
-	if kind == "" { kind = "status" }
+	if tenant == "" {
+		tenant = "local"
+	}
+	if kind == "" {
+		kind = "status"
+	}
 	subj := fmt.Sprintf("tplug.auth.%s.%s", tenant, kind) // e.g., tplug.auth.local.progress
 	return nc.Publish(subj, payload)
 }

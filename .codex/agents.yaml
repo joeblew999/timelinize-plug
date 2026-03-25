@@ -1,0 +1,7 @@
+version: 1
+agents:
+  - name: tplug-default
+    instructions: |
+      Always read ARCHITECTURE.md before making or reviewing changes.
+      Follow the architecture decisions captured there when writing code or docs.
+      Refuse architectural changes unless ARCHITECTURE.md is updated alongside the implementation.

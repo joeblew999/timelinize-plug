@@ -16,17 +16,20 @@ type LocalRedirectServer struct {
 }
 
 func (s *LocalRedirectServer) WaitCode(ctx context.Context, state string, timeout time.Duration) (string, error) {
-	if s.Addr == "" { s.Addr = "127.0.0.1:8008" }
+	if s.Addr == "" {
+		s.Addr = "127.0.0.1:8008"
+	}
 	ch := make(chan string, 1)
-	server := &http.Server{Addr: s.Addr}
-	http.HandleFunc("/oauth2-redirect", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	server := &http.Server{Addr: s.Addr, Handler: mux}
+	mux.HandleFunc("/oauth2-redirect", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != state {
 			http.Error(w, "state mismatch", 400)
 			return
 		}
 		code := r.URL.Query().Get("code")
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status": "ok",
+			"status":  "ok",
 			"message": "you can close this tab",
 		})
 		ch <- code

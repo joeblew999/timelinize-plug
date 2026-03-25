@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -19,9 +18,12 @@ import (
 
 func openBrowser(url string) {
 	switch runtime.GOOS {
-	case "darwin": exec.Command("open", url).Start()
-	case "windows": exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	default: exec.Command("xdg-open", url).Start()
+	case "darwin":
+		exec.Command("open", url).Start()
+	case "windows":
+		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		exec.Command("xdg-open", url).Start()
 	}
 }
 
@@ -51,9 +53,13 @@ func AuthGoogle(ctx context.Context, store storage.TokenStore) error {
 	openBrowser(url)
 	ls := &LocalRedirectServer{Addr: "127.0.0.1:8008"}
 	code, err := ls.WaitCode(ctx, state, 3*time.Minute)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	tok, err := Exchange(ctx, conf, code)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return PersistRawToken(ctx, store, "google", tok)
 }
 
@@ -66,16 +72,20 @@ func AuthGitHub(ctx context.Context, store storage.TokenStore) error {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirect,
-		Scopes: []string{"repo"},
-		Endpoint: github.Endpoint,
+		Scopes:       []string{"repo"},
+		Endpoint:     github.Endpoint,
 	}
 	state := randomState(18)
 	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	openBrowser(url)
 	ls := &LocalRedirectServer{Addr: "127.0.0.1:8008"}
 	code, err := ls.WaitCode(ctx, state, 3*time.Minute)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	tok, err := Exchange(ctx, conf, code)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return PersistRawToken(ctx, store, "github", tok)
 }

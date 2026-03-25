@@ -30,18 +30,30 @@
 - Embedded PB provides SQLite, KV/Secrets, Files (local FS or S3/R2 toggle).
 - Layout: local `~/Timelinize/<source>/...`; multi-tenant `tenants/<tenant_id>/timeline/...`
 - Token encryption: PB-managed AES key (fallback: local key file).
-- Later: PB auth for UI users (Datastar GUI).
+- Local-only PocketBase admin bootstrap + login exposed via `/api/pb/admin/*` (no external calls).
+- High availability / clustering: can leverage [pocketbase-ha](https://github.com/litesql/pocketbase-ha) (e.g., S3/R2 with local cache as discussed in [issue #1](https://github.com/litesql/pocketbase-ha/issues/1)) when a distributed setup is required (experimental).
+- Datastar admin console drives provider toggles using the active PocketBase admin session.
+
+## Datastar
+- uses https://github.com/starfederation/datastar-go
+- PocketBase is reactive and can serve changes over SSE that Datastar can tap into.
+- Admin UI now boots/logs in PocketBase admins, exposes Google/GitHub provider toggles, and mirrors updates in realtime.
+- examples:
+  - https://github.com/CoreyCole/datastarui but we want to use html templates and not templ.
 
 ## Timelinize & Datasources
 - Import `github.com/timelinize/timelinize` directly (no subprocess).
 - Initial: Google (Photos, Gmail), GitHub, Generic (JSON/CSV).
-- Apple: placeholders now; add TeamID/ServiceID/KeyID/.p8 later (browser login).
+- Apple: placeholders now; add TeamID/ServiceID/KeyID/.p8 later (browser login) — **P2 roadmap**.
+- Future: surface PocketBase auth providers through Datastar UI to cover additional providers (GitLab, Azure AD, etc.).
 
 ## OAuth (oauth2client)
+- Datastar admin UI manages provider credentials. For built-in PocketBase providers (GitHub, Google, Apple, GitLab, etc.) the UI calls PocketBase’s admin endpoints using a PocketBase admin session.
+- CLI `tplug auth` reads provider settings from PocketBase and invokes the corresponding PocketBase OAuth endpoints when available (fallback to direct oauth2client when provider not supported by PB).
+- Provider updates flow to PocketBase settings and mirror into KV (`oauth2/clients`) for backwards compatibility and non-PB-managed providers.
 - GUI: open browser, local redirect; Headless: code-paste fallback.
-- Credentials: local YAML defaults (`~/.tplug/credentials.yaml`) + PB KV overrides (`oauth2/clients`).
+- Tokens are encrypted and stored inside PocketBase (AES-GCM).
 
-## CLI
 - `tplug auth --provider google|github|apple`
 - `tplug import --source <name> --from <path|url> --out <dir> [--tenant <id>]`
 - `tplug serve [--memory] [--offline]`
@@ -55,6 +67,12 @@
 - `POST /api/import`
 - `GET /api/status`
 - `GET /events/{topic}` (`import`|`auth`|`status`)
+- `GET /api/pb/admin/state`
+- `POST /api/pb/admin/bootstrap`
+- `POST /api/pb/admin/login`
+- `POST /api/pb/admin/logout`
+- `GET /api/pb/admin/providers`
+- `POST /api/pb/admin/providers`
 - `GET /healthz`
 
 ## Diagram
@@ -100,9 +118,11 @@ flowchart LR
 - [ ] P1: oauth2client flows + token encryption (PB)
 - [ ] P1: self-update cmd + server daily check
 - [ ] P2: Apple provider flow + keys
-- [ ] P2: PB auth for UI; Datastar GUI integration
+- [ ] P2: PB auth for UI; Datastar GUI integration (expose PocketBase auth providers in Datastar, reuse PB admin login)
+- [ ] P2: CLI `tplug auth` to dispatch through PocketBase OAuth endpoints for all supported providers
 - [ ] P2: S3/R2 toggle + multi-tenant finalize
 - [ ] P3: checksums/signatures, metrics, tracing
 
 ## Change Log
+- [2025-12-15] Added PocketBase admin bootstrap/login UI, provider sync endpoints, and Datastar integration.
 - [2025-10-10] Initial spec committed.
